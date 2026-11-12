@@ -10,8 +10,8 @@ import (
 	"github.com/forkcloser/xos"
 	"github.com/mycophonic/primordium/filesystem"
 
-	"github.com/duncanite/go-unifi/internal/console"
-	"github.com/duncanite/go-unifi/internal/documents"
+	"github.com/duncanite/go-unifi/console"
+	"github.com/duncanite/go-unifi/documents"
 )
 
 func kinds() []console.Kind {

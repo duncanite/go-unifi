@@ -8,8 +8,8 @@ import (
 
 	"github.com/mycophonic/primordium/fault"
 
-	"github.com/duncanite/go-unifi/internal/console"
-	"github.com/duncanite/go-unifi/internal/console/consoletest"
+	"github.com/duncanite/go-unifi/console"
+	"github.com/duncanite/go-unifi/console/consoletest"
 )
 
 func kind(t *testing.T, name string) console.Kind {

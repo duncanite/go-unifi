@@ -2,30 +2,22 @@
 // files; plan reads both and prints every difference; apply makes them.
 // The console's address, site and API key come from the environment:
 // UNIFI_URL, UNIFI_SITE and UNIFI_API_KEY; UNIFI_TLS_FINGERPRINT pins its
-// self-signed certificate.
+// self-signed certificate. The package is wiring: the flags, the exit
+// statuses and the order of calls into console, documents and reconcile.
 package cli
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/tls"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/alecthomas/kong"
-	"github.com/mycophonic/primordium/fault"
-	"github.com/mycophonic/primordium/filesystem"
-	"github.com/mycophonic/primordium/filesystem/flock"
 
-	"github.com/duncanite/go-unifi/internal/console"
-	"github.com/duncanite/go-unifi/internal/documents"
-	"github.com/duncanite/go-unifi/internal/reconcile"
+	"github.com/duncanite/go-unifi/console"
+	"github.com/duncanite/go-unifi/documents"
+	"github.com/duncanite/go-unifi/reconcile"
 )
 
 // Exit statuses: plan says whether anything would change the way
@@ -78,73 +70,17 @@ var (
 )
 
 func (root *rootCommand) reconciler() (*reconcile.Reconciler, error) {
-	tlsConfig, err := tlsConfig(root.Fingerprint, root.Insecure)
+	httpClient, err := console.HTTPClient(root.Fingerprint, root.Insecure, requestTimeout)
 	if err != nil {
 		return nil, err
 	}
 
-	// app.Main wraps http.DefaultTransport in primordium's own round
-	// tripper, which embeds the *http.Transport and so clones like one; the
-	// clone is this client's pool, with the console's TLS in place of the
-	// process default, and the wrapper's header and log line left behind.
-	cloner, ok := http.DefaultTransport.(interface{ Clone() *http.Transport })
-	if !ok {
-		return nil, fmt.Errorf("%w: the default transport cannot be cloned", fault.ErrSystemFailure)
-	}
-
-	transport := cloner.Clone()
-	transport.TLSClientConfig = tlsConfig
-
-	client, err := console.New(
-		&http.Client{Transport: transport, Timeout: requestTimeout},
-		root.URL,
-		root.APIKey,
-		root.Site,
-	)
+	client, err := console.New(httpClient, root.URL, root.APIKey, root.Site)
 	if err != nil {
 		return nil, fmt.Errorf("console: %w", err)
 	}
 
 	return &reconcile.Reconciler{Console: client}, nil
-}
-
-// tlsConfig verifies the console's certificate by its fingerprint when one
-// is given, by the system roots otherwise; insecure verifies nothing. The
-// console's certificate is self-signed, so the roots alone refuse it.
-func tlsConfig(fingerprint string, insecure bool) (*tls.Config, error) {
-	config := &tls.Config{MinVersion: tls.VersionTLS12}
-
-	if insecure {
-		config.InsecureSkipVerify = true // #nosec G402 -- the flag the user set says so, for the run that reads the fingerprint
-
-		return config, nil
-	}
-
-	if fingerprint == "" {
-		return config, nil
-	}
-
-	pin, err := hex.DecodeString(strings.ToLower(strings.NewReplacer(":", "", " ", "").Replace(fingerprint)))
-	if err != nil || len(pin) != sha256.Size {
-		return nil, fmt.Errorf("%w: fingerprint %q is not a hex SHA-256", fault.ErrInvalidArgument, fingerprint)
-	}
-
-	config.InsecureSkipVerify = true // #nosec G402 -- VerifyConnection below pins the certificate instead
-	config.VerifyConnection = func(state tls.ConnectionState) error {
-		for _, cert := range state.PeerCertificates {
-			sum := sha256.Sum256(cert.Raw)
-			if hex.EncodeToString(sum[:]) == hex.EncodeToString(pin) {
-				return nil
-			}
-		}
-
-		return fmt.Errorf(
-			"%w: the console's certificate does not match the pinned fingerprint",
-			fault.ErrAuthenticationFailure,
-		)
-	}
-
-	return config, nil
 }
 
 // plan loads the files and computes the changes; plan and apply start here.
@@ -167,28 +103,6 @@ func (root *rootCommand) plan(ctx context.Context, dir string) (*reconcile.Recon
 	plan.Write(root.out)
 
 	return rec, plan, nil
-}
-
-// locked runs function holding the documents directory's advisory lock:
-// exclusive for a command that writes the files or the console, shared for
-// plan, so two plans run together and a plan waits for an apply. Two applies
-// at once would plan from the same snapshot and both create the same
-// documents; in turn, the second finds the first's work and does nothing.
-// The lock is this host's: it orders the invocations on one checkout.
-func locked(dir string, exclusive bool, function func() error) error {
-	defer flock.Cleanup(dir)
-
-	with := flock.WithReadOnlyLock
-	if exclusive {
-		with = flock.WithLock
-	}
-
-	err := with(dir, function)
-	if errors.Is(err, flock.ErrLockFail) {
-		return fmt.Errorf("locking %s: %w", dir, err)
-	}
-
-	return err
 }
 
 // Run reads the console before it touches the directory: a path mistyped
@@ -215,30 +129,24 @@ func (cmd *dumpCommand) Run(ctx context.Context, root *rootCommand) error {
 		return fmt.Errorf("dumping: %w", err)
 	}
 
-	// The directory is the lock, so it exists before the files are written.
-	if err := os.MkdirAll(cmd.Dir, filesystem.DirPermissionsDefault); err != nil {
-		return fmt.Errorf("%w: creating %s: %w", fault.ErrWriteFailure, cmd.Dir, err)
+	// Locked creates the directory, which is the lock, before the first
+	// file is written under it.
+	var written []documents.Written
+
+	err = documents.Locked(cmd.Dir, true, func() error {
+		written, err = documents.WriteSet(cmd.Dir, console.Kinds(), set)
+
+		return err
+	})
+	if err != nil {
+		return err
 	}
 
-	return locked(cmd.Dir, true, func() error { return cmd.write(root, set) })
-}
-
-func (cmd *dumpCommand) write(root *rootCommand, set *documents.Set) error {
-	for _, kind := range console.Kinds() {
-		docs, ok := set.Kinds[kind.Name]
-		if !ok {
-			continue
-		}
-
-		orphans, err := documents.Write(cmd.Dir, kind, docs)
-		if err != nil {
-			return fmt.Errorf("writing %s: %w", kind.Name, err)
-		}
-
-		fmt.Fprintf(root.out, "%s: %d documents\n", kind.Name, len(docs))
+	for _, kind := range written {
+		fmt.Fprintf(root.out, "%s: %d documents\n", kind.Kind, kind.Count)
 
 		// A comment on a key the console no longer has had nowhere to go.
-		for _, orphan := range orphans {
+		for _, orphan := range kind.Orphans {
 			fmt.Fprintf(root.out, "  comment left behind at %s\n", orphan)
 		}
 	}
@@ -247,7 +155,7 @@ func (cmd *dumpCommand) write(root *rootCommand, set *documents.Set) error {
 }
 
 func (cmd *planCommand) Run(ctx context.Context, root *rootCommand) error {
-	return locked(cmd.Dir, false, func() error {
+	return documents.Locked(cmd.Dir, false, func() error {
 		_, plan, err := root.plan(ctx, cmd.Dir)
 		if err != nil {
 			return err
@@ -262,7 +170,7 @@ func (cmd *planCommand) Run(ctx context.Context, root *rootCommand) error {
 }
 
 func (cmd *applyCommand) Run(ctx context.Context, root *rootCommand) error {
-	return locked(cmd.Dir, true, func() error { return cmd.apply(ctx, root) })
+	return documents.Locked(cmd.Dir, true, func() error { return cmd.apply(ctx, root) })
 }
 
 func (cmd *applyCommand) apply(ctx context.Context, root *rootCommand) error {

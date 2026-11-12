@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/duncanite/go-unifi/internal/console"
-	"github.com/duncanite/go-unifi/internal/documents"
+	"github.com/duncanite/go-unifi/console"
+	"github.com/duncanite/go-unifi/documents"
 )
 
 // state is the console as last read: every kind's documents, and the two
