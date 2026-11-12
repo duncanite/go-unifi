@@ -188,8 +188,8 @@ func Kinds() []Kind {
 		}), "source.zone_id", "destination.zone_id")),
 		{
 			Name: Setting, Identity: "key",
-			// Every key a setting points at a network with, as the house
-			// console has them, and the RADIUS profile two settings name.
+			// Every key a setting points at a network with, and the RADIUS
+			// profile two settings name.
 			Refs: map[string]string{
 				"enabled_for_network_ids":                 NetworkConf,
 				"enabled_networks":                        NetworkConf,

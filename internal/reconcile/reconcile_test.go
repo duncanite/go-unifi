@@ -194,7 +194,7 @@ func TestFirewallAsFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The built-in zones are the console's own; a zone the house made is a
+	// The built-in zones are the console's own; a zone the owner made is a
 	// file, and its networks are not in it: each network states its zone.
 	for _, doc := range set.Kinds["firewallzone"] {
 		if doc["name"] == "External" || doc["name"] == "Internal" {
@@ -882,8 +882,8 @@ func TestApplyRefusesWhatTheConsoleKeptOnCreate(t *testing.T) {
 // TestApplyRanksAPolicyAfterTheBuiltIn: a file ranked behind the pair's
 // built-in policies goes in the batch's after list, and the number read
 // back is the one behind them. The fake numbers the after list from the
-// last built-in on; the house has no policy there, so the controller's
-// own numbering of that list is unobserved.
+// last built-in on; no console observed had a policy there, so the
+// controller's own numbering of that list is unobserved.
 func TestApplyRanksAPolicyAfterTheBuiltIn(t *testing.T) {
 	t.Parallel()
 

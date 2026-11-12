@@ -20,8 +20,8 @@ import (
 // DefaultSite is the one site a console has unless someone made more.
 const DefaultSite = "default"
 
-// maxResponseBytes caps a response body; stat/device for a house is a few
-// hundred kilobytes.
+// maxResponseBytes caps a response body; stat/device for a home-sized
+// site is a few hundred kilobytes.
 const maxResponseBytes = 32 << 20
 
 // Document is one controller object, keys as the controller spells them.
