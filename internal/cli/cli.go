@@ -46,7 +46,7 @@ type exitStatus int
 const requestTimeout = 30 * time.Second
 
 type rootCommand struct {
-	URL         string `default:"https://10.0.0.1"                                                 env:"UNIFI_URL"                                                                        help:"The console: scheme and host."`
+	URL         string `default:"https://192.168.1.1"                                              env:"UNIFI_URL"                                                                        help:"The console: scheme and host, with the port when it is not 443."`
 	APIKey      string `env:"UNIFI_API_KEY"                                                        help:"API key minted on the console under Control Plane → Integrations."               required:"true"`
 	Site        string `default:"default"                                                          env:"UNIFI_SITE"                                                                       help:"The Network site."`
 	Fingerprint string `env:"UNIFI_TLS_FINGERPRINT"                                                help:"SHA-256 of the console's certificate, hex, pinned in place of the system roots."`

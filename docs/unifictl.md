@@ -31,7 +31,8 @@ unifictl apply console/   # make the console match the files
 ```
 
 The console's address, site and API key come from the environment (`UNIFI_URL`,
-`UNIFI_SITE`, `UNIFI_API_KEY`), never from the tree. The console's certificate is
+`UNIFI_SITE`, `UNIFI_API_KEY`), never from the tree; unset, the address is the factory
+one, `https://192.168.1.1`, and the site `default`. The console's certificate is
 self-signed; `UNIFI_TLS_FINGERPRINT` pins it by its SHA-256, and `--insecure` accepts
 anything, for a console whose certificate is about to change. Nothing runs in CI: the
 console is on the house LAN.
@@ -182,8 +183,9 @@ All three landed on 2026-11-09 and 2026-11-10.
 ## Running it
 
 ```bash
+export UNIFI_URL=https://192.168.1.1 # the console; the factory address is the default
 export UNIFI_API_KEY=...            # Control Plane → Integrations, on the console
-export UNIFI_TLS_FINGERPRINT="$(openssl s_client -connect 10.0.0.1:443 </dev/null 2>/dev/null \
+export UNIFI_TLS_FINGERPRINT="$(openssl s_client -connect 192.168.1.1:443 </dev/null 2>/dev/null \
   | openssl x509 -noout -fingerprint -sha256 | cut -d= -f2)"
 just unifictl dump console          # once, to seed the files
 just unifictl plan console

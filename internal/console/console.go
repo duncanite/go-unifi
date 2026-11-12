@@ -35,8 +35,8 @@ type Client struct {
 	site   string
 }
 
-// New returns a client for the console at origin (scheme and host, as in
-// https://10.0.0.1), the Network application behind UniFi OS's proxy.
+// New returns a client for the console at origin (scheme, host and port, as in
+// https://192.168.1.1), the Network application behind UniFi OS's proxy.
 func New(httpClient *http.Client, origin, apiKey, site string) (*Client, error) {
 	base, err := url.Parse(strings.TrimSuffix(origin, "/") + "/proxy/network/")
 	if err != nil {

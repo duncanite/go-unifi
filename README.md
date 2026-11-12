@@ -7,6 +7,7 @@ controller's keys with the controller's spellings, and what the controller accep
 can say.
 
 ```bash
+export UNIFI_URL=https://192.168.1.1 # the console; the factory address is the default
 export UNIFI_API_KEY=...            # Control Plane → Integrations, on the console
 export UNIFI_TLS_FINGERPRINT=...    # the console's certificate, SHA-256, hex
 just unifictl dump console          # the console into console/, one file per document

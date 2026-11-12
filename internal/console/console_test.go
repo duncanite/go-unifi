@@ -40,7 +40,7 @@ func client(t *testing.T, srv *consoletest.Server, key string) *console.Client {
 func TestNewRejectsEmptyKey(t *testing.T) {
 	t.Parallel()
 
-	_, err := console.New(http.DefaultClient, "https://10.0.0.1", "", "")
+	_, err := console.New(http.DefaultClient, "https://192.168.1.1", "", "")
 	if !errors.Is(err, fault.ErrInvalidArgument) {
 		t.Fatalf("err = %v, want ErrInvalidArgument", err)
 	}
