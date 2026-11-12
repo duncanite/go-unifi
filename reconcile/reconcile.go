@@ -19,8 +19,8 @@ import (
 
 	"github.com/mycophonic/primordium/fault"
 
-	"github.com/duncanite/go-unifi/internal/console"
-	"github.com/duncanite/go-unifi/internal/documents"
+	"github.com/duncanite/go-unifi/console"
+	"github.com/duncanite/go-unifi/documents"
 )
 
 // ErrUnresolved is the sentinel for a reference the console cannot answer.

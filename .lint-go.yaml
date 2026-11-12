@@ -17,6 +17,12 @@ golangci:
               - github.com/forkcloser/xos
               - github.com/alecthomas/kong
               - go.yaml.in/yaml/v4
+      wrapcheck:
+        # The module's own packages wrap every error with its context at
+        # the call that failed; the command re-wrapping each one would say
+        # the same thing twice.
+        ignore-package-globs:
+          - github.com/duncanite/go-unifi/*
       forbidigo:
         forbid:
           # A file is opened through xos, whose handles let another process

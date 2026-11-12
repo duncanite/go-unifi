@@ -21,6 +21,10 @@ how the firewall policy order is kept, how a plan is read and an apply checked a
 the controller's answer. The files of a console belong with whoever runs it; this
 repository holds the tool.
 
+The library is `console`, the slice of the controller's API the tool speaks; `documents`,
+the files; and `reconcile`, the plan and the apply between them. `cmd/unifictl` and
+`internal/cli` are the binary around them, and another binary wires the same three.
+
 ## Installing
 
 Each release carries an archive per platform: macOS on Apple silicon, Linux and Windows

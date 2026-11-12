@@ -13,8 +13,8 @@ import (
 	"github.com/mycophonic/primordium/filesystem"
 	"github.com/mycophonic/primordium/network"
 
+	"github.com/duncanite/go-unifi/console/consoletest"
 	"github.com/duncanite/go-unifi/internal/cli"
-	"github.com/duncanite/go-unifi/internal/console/consoletest"
 )
 
 // TestMain installs the process default transport app.Main installs, so

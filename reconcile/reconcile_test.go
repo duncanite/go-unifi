@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/duncanite/go-unifi/internal/console"
-	"github.com/duncanite/go-unifi/internal/console/consoletest"
-	"github.com/duncanite/go-unifi/internal/documents"
-	"github.com/duncanite/go-unifi/internal/reconcile"
+	"github.com/duncanite/go-unifi/console"
+	"github.com/duncanite/go-unifi/console/consoletest"
+	"github.com/duncanite/go-unifi/documents"
+	"github.com/duncanite/go-unifi/reconcile"
 )
 
 func house(t *testing.T) (*consoletest.Server, *reconcile.Reconciler) {

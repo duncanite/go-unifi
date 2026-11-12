@@ -20,7 +20,7 @@ import (
 	"github.com/mycophonic/primordium/filesystem"
 	"go.yaml.in/yaml/v4"
 
-	"github.com/duncanite/go-unifi/internal/console"
+	"github.com/duncanite/go-unifi/console"
 )
 
 // Extension is the one the files carry.
