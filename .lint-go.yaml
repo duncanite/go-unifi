@@ -1,0 +1,26 @@
+# This project's carve-outs from the Go lint baseline (.limen/lint-go.yaml):
+# the baseline's sections, in its shape, holding only what this project adds,
+# changes or takes out. `just do lint go` renders the two on every run
+# (book/linting-go.md, "one baseline, per-project carve-outs").
+golangci:
+  linters:
+    settings:
+      depguard:
+        rules:
+          main:
+            # The dependencies unifictl is built on: the house application
+            # toolkit, the file calls with the share mode os lacks on
+            # Windows, the CLI framework, and the YAML parser for the
+            # documents. Everything else stays the baseline's $gostd.
+            allow:
+              - github.com/mycophonic/primordium
+              - github.com/forkcloser/xos
+              - github.com/alecthomas/kong
+              - go.yaml.in/yaml/v4
+      forbidigo:
+        forbid:
+          # A file is opened through xos, whose handles let another process
+          # rename or remove it on Windows; a write goes through primordium's
+          # atomic WriteFile, with its permission constants.
+          - pattern: '^os\.(Open|OpenFile|Create|CreateTemp|ReadFile|WriteFile|ReadDir|Rename)$'
+            msg: "open files through github.com/forkcloser/xos, write them through primordium's filesystem.WriteFile"
