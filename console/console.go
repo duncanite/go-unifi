@@ -1,7 +1,9 @@
 // Package console is the slice of the controller's private Network API the
 // tool uses: collections of documents under rest/, the device list under
 // stat/, settings written through set/, and the v2 lists references point
-// at. A document is the controller's JSON object as it is, nothing renamed.
+// at; and, for a caller that watches a console and changes nothing, what
+// it reports of its clients and of its own health. A document is the
+// controller's JSON object as it is, nothing renamed.
 package console
 
 import (
@@ -66,6 +68,21 @@ func (c *Client) List(ctx context.Context, kind Kind) ([]Document, error) {
 	}
 
 	return c.v1(ctx, http.MethodGet, c.v1Path(kind.list), nil)
+}
+
+// Clients returns the clients the console sees now, wired and wireless,
+// one document each: where a client is attached, what it carries, how well
+// it is heard. A report: nothing of it is configuration, and nothing here
+// writes it back.
+func (c *Client) Clients(ctx context.Context) ([]Document, error) {
+	return c.v1(ctx, http.MethodGet, c.v1Path("stat/sta"), nil)
+}
+
+// Health returns the console's own verdict on each of its subsystems, one
+// document each, named by its "subsystem": the uplink, the internet behind
+// it, the wireless and the wired networks, the VPN. A report, like Clients.
+func (c *Client) Health(ctx context.Context) ([]Document, error) {
+	return c.v1(ctx, http.MethodGet, c.v1Path("stat/health"), nil)
 }
 
 // Create adds a document to a kind and returns it as the controller stored
