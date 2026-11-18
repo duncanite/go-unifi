@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,16 @@ const DefaultSite = "default"
 // maxResponseBytes caps a response body; stat/device for a home-sized
 // site is a few hundred kilobytes.
 const maxResponseBytes = 32 << 20
+
+// maxReason caps what of an answer that is no error of the controller's
+// goes into an error: a proxy's page says what it has to say in its first
+// lines, and a caller that logs its errors logs this each time.
+const maxReason = 512
+
+// errRedirected is the console answering with a redirect. None is
+// followed: the key goes out with every request, and the place a redirect
+// names is not the console whose certificate was checked.
+var errRedirected = errors.New("the console answered with a redirect, which is not followed")
 
 // Document is one controller object, keys as the controller spells them.
 type Document map[string]any
@@ -53,7 +64,12 @@ func New(httpClient *http.Client, origin, apiKey, site string) (*Client, error) 
 		site = DefaultSite
 	}
 
-	return &Client{http: httpClient, base: base, apiKey: apiKey, site: site}, nil
+	// The caller's client, less its way with redirects: a copy, so theirs
+	// is not changed under them.
+	own := *httpClient
+	own.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirected }
+
+	return &Client{http: &own, base: base, apiKey: apiKey, site: site}, nil
 }
 
 // List returns every document of a kind.
@@ -313,5 +329,11 @@ func message(data []byte) string {
 		return strings.TrimSpace(v2.Code + " " + v2.Message)
 	}
 
-	return string(bytes.TrimSpace(data))
+	reason := string(bytes.TrimSpace(data))
+	if len(reason) > maxReason {
+		// Cut on a rune, so what is logged is text.
+		reason = strings.ToValidUTF8(reason[:maxReason], "") + "…"
+	}
+
+	return reason
 }
