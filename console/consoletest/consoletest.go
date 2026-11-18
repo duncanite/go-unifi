@@ -32,7 +32,8 @@ type Server struct {
 
 	mu sync.Mutex
 	// docs holds the v1 collections by name (networkconf, setting, device,
-	// usergroup...) and the v2 ones by their path (apgroups, firewall/zone).
+	// usergroup...), the v2 ones by their path (apgroups, firewall/zone),
+	// and the two reports by theirs (sta, health).
 	docs map[string][]map[string]any
 	// Stubborn names, per collection, the keys the server answers ok to
 	// and keeps its own values of, as the controller does with a setting
@@ -145,6 +146,10 @@ func (s *Server) v1(writer http.ResponseWriter, req *http.Request, path string) 
 		respond(writer, s.docs[parts[1]])
 	case len(parts) == 2 && parts[0] == "stat" && parts[1] == "device" && req.Method == http.MethodGet:
 		respond(writer, s.docs["device"])
+	case len(parts) == 2 && parts[0] == "stat" && (parts[1] == "sta" || parts[1] == "health") &&
+		req.Method == http.MethodGet:
+		// What the console reports and never takes: read, like a list.
+		respond(writer, s.docs[parts[1]])
 	case len(parts) == 2 && parts[0] == restPrefix && req.Method == http.MethodPost:
 		s.create(writer, req, parts[1])
 	case len(parts) == 3 && parts[0] == restPrefix && req.Method == http.MethodPut:

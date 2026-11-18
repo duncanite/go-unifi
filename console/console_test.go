@@ -1,6 +1,7 @@
 package console_test
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -79,6 +80,62 @@ func TestListV1AndV2(t *testing.T) {
 
 	if len(devices) != 2 || devices[0]["mac"] != "02:00:5e:00:53:91" {
 		t.Fatalf("devices = %v", devices)
+	}
+}
+
+func TestClientsAndHealthAreRead(t *testing.T) {
+	t.Parallel()
+
+	srv := consoletest.New(map[string][]map[string]any{
+		"sta": {
+			{"mac": "02:00:5e:00:53:10", "hostname": "laptop", "is_wired": false, "signal": -52, "rx_bytes": 1024},
+			{"mac": "02:00:5e:00:53:11", "is_wired": true, "sw_port": 3},
+		},
+		"health": {
+			{"subsystem": "wan", "status": "ok"},
+			{"subsystem": "wlan", "status": "ok", "num_user": 7},
+		},
+	})
+	t.Cleanup(srv.Close)
+
+	c := client(t, srv, consoletest.APIKey)
+
+	clients, err := c.Clients(t.Context())
+	if err != nil {
+		t.Fatalf("Clients: %v", err)
+	}
+
+	// The controller's own keys, and its numbers kept exact.
+	if len(clients) != 2 || clients[0]["hostname"] != "laptop" || clients[0]["signal"] != json.Number("-52") ||
+		clients[1]["is_wired"] != true {
+		t.Fatalf("clients = %v", clients)
+	}
+
+	health, err := c.Health(t.Context())
+	if err != nil {
+		t.Fatalf("Health: %v", err)
+	}
+
+	if len(health) != 2 || health[1]["subsystem"] != "wlan" || health[1]["num_user"] != json.Number("7") {
+		t.Fatalf("health = %v", health)
+	}
+
+	// Nothing was written to the console.
+	if len(srv.Requests) != 0 {
+		t.Fatalf("the reads wrote: %v", srv.Requests)
+	}
+
+	// A console with neither answers with none, not with an error.
+	empty := consoletest.New(nil)
+	t.Cleanup(empty.Close)
+
+	if got, err := client(t, empty, consoletest.APIKey).Clients(t.Context()); err != nil || len(got) != 0 {
+		t.Fatalf("Clients of an empty console = %v, %v", got, err)
+	}
+
+	// The key is asked for these as for everything else.
+	if _, err := client(t, srv, "wrong").Health(t.Context()); !errors.Is(err, fault.ErrAuthenticationFailure) {
+		t.Fatalf("Health with a wrong key: %v", err)
 	}
 }
 
