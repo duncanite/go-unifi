@@ -3,9 +3,12 @@ package console_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/mycophonic/primordium/fault"
 
@@ -136,6 +139,78 @@ func TestClientsAndHealthAreRead(t *testing.T) {
 	// The key is asked for these as for everything else.
 	if _, err := client(t, srv, "wrong").Health(t.Context()); !errors.Is(err, fault.ErrAuthenticationFailure) {
 		t.Fatalf("Health with a wrong key: %v", err)
+	}
+}
+
+func TestARedirectIsNotFollowed(t *testing.T) {
+	t.Parallel()
+
+	// Where the redirect points: anything asked of it has the key.
+	asked := make(chan string, 1)
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
+		select {
+		case asked <- req.Header.Get("X-Api-Key"):
+		default:
+		}
+	}))
+	t.Cleanup(elsewhere.Close)
+
+	for _, status := range []int{
+		http.StatusMovedPermanently, http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect,
+	} {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, req *http.Request) {
+			http.Redirect(writer, req, elsewhere.URL+req.URL.Path, status)
+		}))
+		t.Cleanup(srv.Close)
+
+		theirs := srv.Client()
+
+		c, err := console.New(theirs, srv.URL, consoletest.APIKey, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err = c.List(t.Context(), kind(t, "networkconf")); err == nil ||
+			!strings.Contains(err.Error(), "redirect") {
+			t.Fatalf("%d: List = %v, want a refusal of the redirect", status, err)
+		}
+
+		// The caller's own client is as it was.
+		if theirs.CheckRedirect != nil {
+			t.Fatalf("%d: the caller's client was changed", status)
+		}
+	}
+
+	select {
+	case key := <-asked:
+		t.Fatalf("the place a redirect named was asked, with the key %q", key)
+	default:
+	}
+}
+
+func TestAnAnswerThatIsNoErrorOfTheControllersIsCutShort(t *testing.T) {
+	t.Parallel()
+
+	page := strings.Repeat("a proxy's page, é and all. ", 40000)
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusBadGateway)
+		_, _ = writer.Write([]byte(page))
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := console.New(srv.Client(), srv.URL, consoletest.APIKey, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.List(t.Context(), kind(t, "networkconf"))
+
+	const bound = 1024
+
+	if err == nil || len(err.Error()) > bound || !strings.Contains(err.Error(), "502") ||
+		!strings.Contains(err.Error(), "a proxy's page") || !utf8.ValidString(err.Error()) {
+		t.Fatalf("an error of %d bytes for a page of %d: %.200v", len(fmt.Sprint(err)), len(page), err)
 	}
 }
 
