@@ -214,6 +214,77 @@ func TestAnAnswerThatIsNoErrorOfTheControllersIsCutShort(t *testing.T) {
 	}
 }
 
+// TestWhateverSaysNoIsCutShort: the controller's own two ways of saying
+// no are bounded as a stranger's page is, under a failing status and
+// under a 200 that says error; and the cut never leaves half a character.
+func TestWhateverSaysNoIsCutShort(t *testing.T) {
+	t.Parallel()
+
+	const (
+		kept  = 512
+		bound = 1024
+	)
+
+	long := strings.Repeat("no ", 40000)
+
+	for name, test := range map[string]struct {
+		status int
+		body   string
+		// has is in the error, lacks is not.
+		has, lacks string
+	}{
+		"a v1 envelope under a failing status": {
+			http.StatusBadRequest, `{"meta":{"rc":"error","msg":"api.err.` + long + `"}}`, "api.err.no ", "",
+		},
+		"a v2 refusal": {
+			http.StatusBadRequest, `{"code":"INVALID","message":"` + long + `"}`, "INVALID no ", "",
+		},
+		"a v1 envelope that says error under a 200": {
+			http.StatusOK, `{"meta":{"rc":"error","msg":"api.err.` + long + `"},"data":[]}`, "api.err.no ", "",
+		},
+		// As long as what is kept: whole, and not marked as cut.
+		"an answer of just the length kept": {
+			http.StatusBadGateway, strings.Repeat("a", kept), strings.Repeat("a", kept), "…",
+		},
+		"an answer one octet longer": {
+			http.StatusBadGateway, strings.Repeat("a", kept+1), strings.Repeat("a", kept) + "…", strings.Repeat("a", kept+1),
+		},
+		// Two octets of one character, the cut between them: it goes whole.
+		"a character across the cut": {
+			http.StatusBadGateway, strings.Repeat("a", kept-1) + "é" + long, strings.Repeat("a", kept-1) + "…", "é",
+		},
+		// The same character one octet earlier fits, and stays.
+		"a character that ends at the cut": {
+			http.StatusBadGateway, strings.Repeat("a", kept-2) + "é" + long, strings.Repeat("a", kept-2) + "é…", "",
+		},
+	} {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+			writer.WriteHeader(test.status)
+			_, _ = writer.Write([]byte(test.body))
+		}))
+		t.Cleanup(srv.Close)
+
+		c, err := console.New(srv.Client(), srv.URL, consoletest.APIKey, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = c.List(t.Context(), kind(t, "networkconf"))
+		if err == nil {
+			t.Errorf("%s: no error", name)
+
+			continue
+		}
+
+		said := err.Error()
+
+		if len(said) > bound || !utf8.ValidString(said) || !strings.Contains(said, test.has) ||
+			(test.lacks != "" && strings.Contains(said, test.lacks)) {
+			t.Errorf("%s: an error of %d bytes for an answer of %d: %.120s", name, len(said), len(test.body), said)
+		}
+	}
+}
+
 func TestWrongKeyIsAuthenticationFailure(t *testing.T) {
 	t.Parallel()
 
