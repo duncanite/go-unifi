@@ -27,9 +27,10 @@ const DefaultSite = "default"
 // site is a few hundred kilobytes.
 const maxResponseBytes = 32 << 20
 
-// maxReason caps what of an answer that is no error of the controller's
-// goes into an error: a proxy's page says what it has to say in its first
-// lines, and a caller that logs its errors logs this each time.
+// maxReason caps what of an answer goes into an error, whoever wrote it:
+// a proxy's page says what it has to say in its first lines, a controller's
+// own message is a line, and a caller that logs its errors logs this each
+// time.
 const maxReason = 512
 
 // errRedirected is the console answering with a redirect. None is
@@ -229,7 +230,7 @@ func (c *Client) v1(ctx context.Context, method, path string, body any) ([]Docum
 	}
 
 	if env.Meta.RC != "ok" {
-		return nil, fmt.Errorf("%w: %s %s: %s", fault.ErrUnacceptableResponse, method, path, env.Meta.Message)
+		return nil, fmt.Errorf("%w: %s %s: %s", fault.ErrUnacceptableResponse, method, path, bounded(env.Meta.Message))
 	}
 
 	return env.Data, nil
@@ -308,32 +309,44 @@ func statusError(code int, status, method, path string, data []byte) error {
 	case code == http.StatusNotFound:
 		return fmt.Errorf("%w: %s %s: %s", fault.ErrNotFound, method, path, message(data))
 	case code == http.StatusUnauthorized || code == http.StatusForbidden:
-		return fmt.Errorf("%w: %s %s: %s", fault.ErrAuthenticationFailure, method, path, status)
+		return fmt.Errorf("%w: %s %s: %s", fault.ErrAuthenticationFailure, method, path, bounded(status))
 	case code < http.StatusOK || code >= http.StatusMultipleChoices:
-		return fmt.Errorf("%w: %s %s: %s: %s", fault.ErrUnacceptableResponse, method, path, status, message(data))
+		return fmt.Errorf(
+			"%w: %s %s: %s: %s",
+			fault.ErrUnacceptableResponse,
+			method,
+			path,
+			bounded(status),
+			message(data),
+		)
 	}
 
 	return nil
 }
 
 // message digs the controller's reason out of an error body, whichever of
-// its two shapes it has, and falls back to the body itself.
+// its two shapes it has, and falls back to the body itself; maxReason
+// octets of it at most, whichever it is.
 func message(data []byte) string {
 	var env envelope
 	if json.Unmarshal(data, &env) == nil && env.Meta.Message != "" {
-		return env.Meta.Message
+		return bounded(env.Meta.Message)
 	}
 
 	var v2 v2Error
 	if json.Unmarshal(data, &v2) == nil && (v2.Code != "" || v2.Message != "") {
-		return strings.TrimSpace(v2.Code + " " + v2.Message)
+		return bounded(strings.TrimSpace(v2.Code + " " + v2.Message))
 	}
 
-	reason := string(bytes.TrimSpace(data))
-	if len(reason) > maxReason {
-		// Cut on a rune, so what is logged is text.
-		reason = strings.ToValidUTF8(reason[:maxReason], "") + "…"
+	return bounded(string(bytes.TrimSpace(data)))
+}
+
+// bounded is text, cut after maxReason octets when it is longer.
+func bounded(text string) string {
+	if len(text) <= maxReason {
+		return text
 	}
 
-	return reason
+	// Cut on a rune, so what is logged is text.
+	return strings.ToValidUTF8(text[:maxReason], "") + "…"
 }
